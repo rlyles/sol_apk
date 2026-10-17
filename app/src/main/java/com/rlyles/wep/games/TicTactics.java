@@ -2,6 +2,7 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -9,6 +10,8 @@ import android.graphics.RectF;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.WinApp;
 
@@ -457,8 +460,41 @@ public final class TicTactics extends WinApp {
         return false;
     }
 
+    /** The original's red and blue balls (19 pixels across) from the user's TICTAC.EXE, or null. */
+    private static Bitmap[] art() {
+        return Media.get().cached("tictac.art", m -> {
+            Bitmap strip = m.bitmap("tictac.exe", "100");
+            if (strip == null || strip.getWidth() < 37 || strip.getHeight() < 90) {
+                return null;
+            }
+            return new Bitmap[] {ball(strip, 26), ball(strip, 43)};
+        });
+    }
+
+    /** Cuts the ball centred at (18, cy) out of the strip, keeping only the round part. */
+    private static Bitmap ball(Bitmap strip, int cy) {
+        int size = 19, r2 = 90;
+        int[] px = new int[size * size];
+        strip.getPixels(px, 0, size, 9, cy - 9, size, size);
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                int dx = x - 9, dy = y - 9;
+                if (dx * dx + dy * dy > r2) {
+                    px[y * size + x] = 0;
+                }
+            }
+        }
+        return Bitmap.createBitmap(px, size, size, Bitmap.Config.ARGB_8888);
+    }
+
     private void drawPiece(Canvas c, float[] at, int who) {
         float rx = Math.min(cellW, cellH * 2.2f) * 0.3f, ry = Math.min(cellH, cellW) * 0.32f;
+        Bitmap[] art = art();
+        if (art != null) {
+            float r = ry * 1.25f;
+            Sprites.draw(c, art[who == RED ? 0 : 1], at[0] - r, at[1] - r, 2 * r, 2 * r);
+            return;
+        }
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(Math.max(2.5f, ry * 0.25f));
         paint.setStrokeCap(Paint.Cap.ROUND);

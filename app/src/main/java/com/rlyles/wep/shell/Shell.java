@@ -13,6 +13,8 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.rlyles.wep.cards.CardsDll;
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Music;
 import com.rlyles.wep.savers.Savers;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.Win95;
@@ -36,7 +38,14 @@ public final class Shell extends ViewGroup implements WinApp.Host, SaverView.Lis
     public interface Platform {
         void pickFile(WinApp.FileResult result);
 
+        /** Lets the user pick one or more files; their names and bytes go to {@code result}. */
+        void pickFiles(FilesResult result);
+
         void finishShell();
+    }
+
+    public interface FilesResult {
+        void files(List<String> names, List<byte[]> data);
     }
 
     private final Platform platform;
@@ -80,6 +89,7 @@ public final class Shell extends ViewGroup implements WinApp.Host, SaverView.Lis
         saverShown = prefs.getBoolean("saverShown", true);
         idleMinutes = prefs.getInt("idle", 0);
         sfx.enabled = prefs.getBoolean("sound", true);
+        Media.init(context);
         loadCards();
 
         saver = new SaverView(context, this);
@@ -384,6 +394,11 @@ public final class Shell extends ViewGroup implements WinApp.Host, SaverView.Lis
     void setSound(boolean on) {
         sfx.enabled = on;
         saveShell();
+        if (on && active != null) {
+            active.mediaChanged();
+        } else if (!on) {
+            Music.stop();
+        }
     }
 
     // ---------------------------------------------------------------- programs
@@ -544,6 +559,25 @@ public final class Shell extends ViewGroup implements WinApp.Host, SaverView.Lis
     @Override
     public void pickFile(WinApp.FileResult result) {
         platform.pickFile(result);
+    }
+
+    void pickFiles(FilesResult result) {
+        platform.pickFiles(result);
+    }
+
+    /** The imported game files or their settings changed: refresh the cards and every open game. */
+    public void mediaChanged() {
+        Media m = Media.get();
+        if (cards == null && m.artOn() && m.has("cards.dll")) {
+            try {
+                setCardsDll(m.read("cards.dll"));
+            } catch (IOException | RuntimeException e) {
+                Log.w("Shell", "imported cards.dll unusable", e);
+            }
+        }
+        for (WinApp app : open) {
+            app.mediaChanged();
+        }
     }
 
     @Override

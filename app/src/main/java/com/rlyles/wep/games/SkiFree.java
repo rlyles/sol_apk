@@ -2,6 +2,7 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -10,6 +11,8 @@ import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.Win95;
 import com.rlyles.wep.win.WinApp;
@@ -307,6 +310,36 @@ public final class SkiFree extends WinApp {
 
     // ---------------------------------------------------------------- drawing
 
+    /** The original sprites from the user's SKI.EXE, by resource number, or null. */
+    private static Bitmap[] art() {
+        return Media.get().cached("ski.art", m -> {
+            if (!m.hasArt("ski.exe")) {
+                return null;
+            }
+            Bitmap[] a = new Bitmap[87];
+            for (int i = 1; i < a.length; i++) {
+                Bitmap b = m.bitmap("ski.exe", Integer.toString(i));
+                a[i] = b == null ? null : Sprites.cutOut(b);
+            }
+            return a[1] == null ? null : a;
+        });
+    }
+
+    /** Draws original sprite {@code id} standing on (bx, by); false if there is no such sprite. */
+    private boolean sprite(Canvas c, int id, float bx, float by) {
+        Bitmap[] a = art();
+        if (a == null || a[id] == null) {
+            return false;
+        }
+        Bitmap b = a[id];
+        Sprites.draw(c, b, bx - b.getWidth() * k / 2, by - b.getHeight() * k, b.getWidth() * k, b.getHeight() * k);
+        return true;
+    }
+
+    private static int frame(float fps, int frames) {
+        return (int) (SystemClock.uptimeMillis() * fps / 1000) % frames;
+    }
+
     @Override
     protected void layoutClient(RectF r) {
         view.set(r);
@@ -387,6 +420,10 @@ public final class SkiFree extends WinApp {
     }
 
     private void drawObject(Canvas c, int kind, float bx, float by) {
+        int[] ids = {49, 49, 50, 45, 46, 48, 52, 23};
+        if (kind >= 0 && kind < ids.length && sprite(c, ids[kind], bx, by + (kind == RAMP || kind == MOGUL ? 4 * k : 0))) {
+            return;
+        }
         float s = k;
         Path p = new Path();
         switch (kind) {
@@ -452,6 +489,14 @@ public final class SkiFree extends WinApp {
     }
 
     private void drawSkier(Canvas c, float bx, float by) {
+        // Original frames: 1 straight down, 2-4 turning left to stopped, 5-7 the same to the right,
+        // 12 "OUCH!", 13 sitting in the snow, 14-15 in the air.
+        int id = crashTime > 0 ? (crashTime > 0.5f ? 12 : 13)
+                : airTime > 0 ? (airTime > 0.6f ? 15 : 14)
+                : dir == 0 ? 1 : dir < 0 ? 1 - dir : 4 + dir;
+        if (sprite(c, id, bx, by)) {
+            return;
+        }
         float s = k;
         Paint st = new Paint(Paint.ANTI_ALIAS_FLAG);
         st.setStrokeCap(Paint.Cap.ROUND);
@@ -493,6 +538,9 @@ public final class SkiFree extends WinApp {
     }
 
     private void drawDog(Canvas c, float bx, float by, boolean right) {
+        if (sprite(c, 33 + frame(4, 2), bx, by)) {
+            return;
+        }
         float s = k, f = right ? 1 : -1;
         paint.setColor(0xFF8B5A2B);
         c.drawOval(bx - 7 * s, by - 8 * s, bx + 7 * s, by - 3 * s, paint);
@@ -505,6 +553,18 @@ public final class SkiFree extends WinApp {
     }
 
     private void drawYeti(Canvas c, float bx, float by) {
+        // Original frames: 70-73 running, 74-75 running up the hill, 76-79 eating, 80-81 after.
+        int id;
+        if (eaten) {
+            int step = (int) (eatTime * 4);
+            id = step < 4 ? 76 + step : 80 + frame(3, 2);
+        } else {
+            float dx = x - yetiX, dy = y - yetiY;
+            id = dy < 0 && Math.abs(dy) > Math.abs(dx) ? 74 + frame(6, 2) : (dx > 0 ? 70 : 72) + frame(6, 2);
+        }
+        if (sprite(c, id, bx, by)) {
+            return;
+        }
         float s = k * 1.2f;
         paint.setColor(0xFFEFEFEF);
         c.drawOval(bx - 10 * s, by - 34 * s, bx + 10 * s, by - 4 * s, paint);

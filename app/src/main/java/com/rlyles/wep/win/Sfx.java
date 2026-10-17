@@ -5,9 +5,17 @@ import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.util.Log;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Wav;
+
+import java.util.HashMap;
+import java.util.Locale;
+import java.util.Map;
+
 /**
- * Little synthesized sound effects in the spirit of the originals' WAVs (which are not shipped).
- * Every sound is a short PCM buffer generated on first use.
+ * Sound effects. The originals' WAVs aren't shipped; if the user imported them (see
+ * {@link Media}) games can play them by name, and otherwise get a little synthesized sound in
+ * the same spirit, generated on first use.
  */
 public final class Sfx {
     public static final int CLICK = 0, BLIP = 1, BOUNCE = 2, BOOM = 3, WIN = 4, LOSE = 5, LINE = 6,
@@ -15,7 +23,75 @@ public final class Sfx {
     private static final int RATE = 22050;
 
     private final AudioTrack[] tracks = new AudioTrack[COUNT];
+    private final Map<String, AudioTrack> waves = new HashMap<>();
+    private int wavesVersion = -1;
     public boolean enabled = true;
+
+    /**
+     * Plays one of the original WAV files if the user imported it and has original sounds on,
+     * otherwise the built-in {@code fallback} (or nothing if that is negative).
+     */
+    public void play(String wav, int fallback) {
+        if (!enabled) {
+            return;
+        }
+        Media m = Media.get();
+        if (m.version() != wavesVersion) {
+            releaseWaves();
+            wavesVersion = m.version();
+        }
+        if (m.soundsOn()) {
+            String key = wav.toLowerCase(Locale.US);
+            if (!waves.containsKey(key)) {
+                waves.put(key, load(m.read(key)));
+            }
+            AudioTrack t = waves.get(key);
+            if (t != null) {
+                restart(t);
+                return;
+            }
+        }
+        if (fallback >= 0) {
+            play(fallback);
+        }
+    }
+
+    private static AudioTrack load(byte[] wav) {
+        if (wav == null) {
+            return null;
+        }
+        try {
+            int[] rate = new int[1];
+            short[] pcm = Wav.decode(wav, rate);
+            if (pcm.length == 0) {
+                return null;
+            }
+            AudioTrack t = new AudioTrack(AudioManager.STREAM_MUSIC, rate[0], AudioFormat.CHANNEL_OUT_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT, pcm.length * 2, AudioTrack.MODE_STATIC);
+            t.write(pcm, 0, pcm.length);
+            return t;
+        } catch (java.io.IOException | RuntimeException e) {
+            Log.w("Sfx", "bad wav", e);
+            return null;
+        }
+    }
+
+    private static void restart(AudioTrack t) {
+        if (t.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) {
+            t.stop();
+        }
+        t.reloadStaticData();
+        t.play();
+    }
+
+    private void releaseWaves() {
+        for (AudioTrack t : waves.values()) {
+            if (t != null) {
+                t.release();
+            }
+        }
+        waves.clear();
+    }
 
     public void play(int sound) {
         if (!enabled) {
@@ -30,11 +106,7 @@ public final class Sfx {
                 t.write(pcm, 0, pcm.length);
                 tracks[sound] = t;
             }
-            if (t.getPlayState() == AudioTrack.PLAYSTATE_PLAYING) {
-                t.stop();
-            }
-            t.reloadStaticData();
-            t.play();
+            restart(t);
         } catch (RuntimeException e) {
             Log.w("Sfx", "sound failed", e);
             enabled = false;
@@ -42,6 +114,7 @@ public final class Sfx {
     }
 
     public void release() {
+        releaseWaves();
         for (int i = 0; i < COUNT; i++) {
             if (tracks[i] != null) {
                 tracks[i].release();

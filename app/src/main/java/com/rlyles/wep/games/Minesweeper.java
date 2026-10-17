@@ -2,6 +2,7 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -11,6 +12,8 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 
 import com.rlyles.wep.win.Sfx;
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Win95;
 import com.rlyles.wep.win.WinApp;
 
@@ -333,6 +336,72 @@ public final class Minesweeper extends WinApp {
         face.set(panel.centerX() - 13 * k, panel.centerY() - 13 * k, panel.centerX() + 13 * k, panel.centerY() + 13 * k);
     }
 
+    /**
+     * The original strips from the user's WINMINE.EXE: 16 squares, 12 LED digits and 5 faces,
+     * in colour or black and white.
+     */
+    private static final class Art {
+        final Bitmap[] squares = new Bitmap[16], digits = new Bitmap[12], faces = new Bitmap[5];
+    }
+
+    private Art art() {
+        String mono = color ? "" : "1";
+        return Media.get().cached("winmine.art" + mono, m -> {
+            Bitmap sq = m.bitmap("winmine.exe", color ? "410" : "411");
+            Bitmap led = m.bitmap("winmine.exe", color ? "420" : "421");
+            Bitmap fc = m.bitmap("winmine.exe", color ? "430" : "431");
+            if (sq == null || led == null || fc == null || sq.getHeight() < 256 || led.getHeight() < 276
+                    || fc.getHeight() < 120) {
+                return null;
+            }
+            Art a = new Art();
+            for (int i = 0; i < 16; i++) {
+                a.squares[i] = Sprites.slice(sq, 0, i * 16, 16, 16);
+            }
+            for (int i = 0; i < 12; i++) {
+                a.digits[i] = Sprites.slice(led, 0, i * 23, 13, 23);
+            }
+            for (int i = 0; i < 5; i++) {
+                a.faces[i] = Sprites.slice(fc, 0, i * 24, 24, 24);
+            }
+            return a;
+        });
+    }
+
+    /** Three LED digits from the strip ('-', blank, then 9 down to 0), with a minus sign for negatives. */
+    private static void drawLed(Canvas c, Art a, RectF r, int value) {
+        value = Math.max(-99, Math.min(999, value));
+        float w = r.width() / 3;
+        for (int i = 0; i < 3; i++) {
+            int cell;
+            if (value < 0 && i == 0) {
+                cell = 0;
+            } else {
+                int place = (int) Math.pow(10, 2 - i);
+                cell = 2 + 9 - (Math.abs(value) / place) % 10;
+            }
+            Sprites.draw(c, a.digits[cell], r.left + i * w, r.top, w, r.height());
+        }
+    }
+
+    /** Which original square to show for cell {@code i}. */
+    private int square(int i) {
+        int s = state[i];
+        if (lost && mine[i] && s != FLAG) {
+            return i == exploded ? 3 : 5;
+        }
+        if (lost && s == FLAG && !mine[i]) {
+            return 4;
+        }
+        if (s == OPEN) {
+            return 15 - around(i);
+        }
+        if (i == pressedCell && (s == HIDDEN || s == QUESTION)) {
+            return s == QUESTION ? 6 : 15;
+        }
+        return s == FLAG ? 1 : s == QUESTION ? 2 : 0;
+    }
+
     private void bevel(Canvas c, RectF r, float width, boolean raised) {
         int a = raised ? Win95.HILITE : Win95.SHADOW, b = raised ? Win95.SHADOW : Win95.HILITE;
         paint.setColor(a);
@@ -350,6 +419,24 @@ public final class Minesweeper extends WinApp {
         bevel(c, new RectF(outer.left + 3 * k, outer.top + 3 * k, outer.right - 3 * k, outer.bottom - 3 * k), 3 * k, true);
         bevel(c, panel, 2 * k, false);
         bevel(c, field, 3 * k, false);
+        Art a = art();
+        if (a != null) {
+            // The originals: 13x23 digits inside a 1-pixel frame, and a 24-pixel face button.
+            bevel(c, new RectF(counter.left + k, counter.top + k, counter.right - k, counter.bottom - k), k, false);
+            bevel(c, new RectF(timer.left + k, timer.top + k, timer.right - k, timer.bottom - k), k, false);
+            drawLed(c, a, new RectF(counter.left + k, counter.top + k, counter.right - k, counter.bottom - k),
+                    mines - flagsPlaced());
+            drawLed(c, a, new RectF(timer.left + k, timer.top + k, timer.right - k, timer.bottom - k), seconds);
+            paint.setColor(Win95.SHADOW);
+            c.drawRect(face, paint);
+            int f = facePressed ? 0 : lost ? 2 : won ? 1 : fieldPressed ? 3 : 4;
+            Sprites.draw(c, a.faces[f], face.left + k, face.top + k, face.width() - 2 * k, face.height() - 2 * k);
+            for (int i = 0; i < cols * rows; i++) {
+                Sprites.draw(c, a.squares[square(i)], field.left + (i % cols) * cell, field.top + (i / cols) * cell,
+                        cell, cell);
+            }
+            return;
+        }
         ui.led(c, counter, mines - flagsPlaced(), 3);
         ui.led(c, timer, seconds, 3);
         drawFace(c);

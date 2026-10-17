@@ -2,6 +2,7 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -9,6 +10,8 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.ViewConfiguration;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.WinApp;
 
@@ -208,12 +211,12 @@ public final class JezzBall extends WinApp {
             bAlive = false;
         }
         lives--;
-        sound(Sfx.BOOM);
+        sound("jezzdead.wav", Sfx.BOOM);
         if (lives <= 0) {
             building = false;
             clearBuilding();
             over = true;
-            sound(Sfx.LOSE);
+            sound("gamelost.wav", Sfx.LOSE);
             post(this::checkHighScore);
         }
     }
@@ -240,11 +243,11 @@ public final class JezzBall extends WinApp {
             levelDone = true;
             int bonus = (percent() - 75) * 2 * level * 10 + timeLeft * level * 10 + lives * 100 * level;
             score += percent() * level * 10 + bonus;
-            sound(Sfx.WIN);
+            sound("winlevel.wav", Sfx.WIN);
             postDelayed(() -> messageBox("JezzBall", "Level " + level + " cleared!\n\nArea captured: " + percent()
                     + "%\nScore: " + score, () -> setupLevel(level + 1)), 300);
         } else {
-            sound(Sfx.BLIP);
+            sound("gap.wav", Sfx.BLIP);
         }
     }
 
@@ -291,12 +294,12 @@ public final class JezzBall extends WinApp {
             if (solidAt(nx + a[2] * r, a[1])) {
                 a[2] = -a[2];
                 nx = a[0];
-                sound(Sfx.BOUNCE);
+                sound("bounce.wav", Sfx.BOUNCE);
             }
             if (solidAt(a[0], ny + a[3] * r)) {
                 a[3] = -a[3];
                 ny = a[1];
-                sound(Sfx.BOUNCE);
+                sound("bounce.wav", Sfx.BOUNCE);
             }
             if (solidAt(nx + a[2] * r, ny + a[3] * r) && !solidAt(nx + a[2] * r, a[1]) && !solidAt(a[0], ny + a[3] * r)) {
                 a[2] = -a[2];
@@ -345,7 +348,7 @@ public final class JezzBall extends WinApp {
             over = true;
             building = false;
             clearBuilding();
-            sound(Sfx.LOSE);
+            sound("gamelost.wav", Sfx.LOSE);
             messageBox("JezzBall", "Time's up!\n\nFinal score: " + score, this::checkHighScore);
         }
         invalidate();
@@ -384,8 +387,59 @@ public final class JezzBall extends WinApp {
         field.set(r.centerX() - w / 2, r.centerY() - h / 2, r.centerX() + w / 2, r.centerY() + h / 2);
     }
 
+    /**
+     * The original's sprite strip from the user's JEZZBALL.EXE: 16x12 tiles (field, captured,
+     * and the red and blue walls being built) and eleven frames of a spinning atom.
+     */
+    private static final class Art {
+        Bitmap open, filled, wallA, wallB;
+        final Bitmap[] atom = new Bitmap[11];
+    }
+
+    private static Art art() {
+        return Media.get().cached("jezz.art", m -> {
+            Bitmap strip = m.bitmap("jezzball.exe", "JEZZ-NEW");
+            if (strip == null || strip.getWidth() < 288 || strip.getHeight() < 24) {
+                return null;
+            }
+            Art a = new Art();
+            a.open = Sprites.slice(strip, 0, 0, 16, 12);
+            a.filled = Sprites.slice(strip, 256, 12, 16, 12);
+            a.wallA = Sprites.slice(strip, 272, 0, 16, 12);
+            a.wallB = Sprites.slice(strip, 272, 12, 16, 12);
+            for (int i = 0; i < 11; i++) {
+                a.atom[i] = Sprites.slice(strip, 16 + i * 16, 0, 16, 12);
+            }
+            return a;
+        });
+    }
+
+    private void drawWithArt(Canvas c, Art a) {
+        c.drawColor(0xFF000000);
+        for (int i = 0; i < grid.length; i++) {
+            int v = grid[i];
+            float x = field.left + (i % GW) * cell, y = field.top + (i / GW) * cell;
+            Sprites.draw(c, v == OPEN ? a.open : v == FILLED ? a.filled : v == BUILD_A ? a.wallA : a.wallB,
+                    x, y, cell, cell);
+        }
+        int frame = (int) (spin / (2 * Math.PI) * 11);
+        for (int n = 0; n < atoms.size(); n++) {
+            float[] at = atoms.get(n);
+            float r = cell * 0.75f, cx = field.left + at[0] * cell, cy = field.top + at[1] * cell;
+            Sprites.draw(c, a.atom[((frame + n * 3) % 11 + 11) % 11], cx - r, cy - r, 2 * r, 2 * r);
+        }
+        if (over || paused) {
+            ui.withFont(20, true, () -> ui.centered(c, over ? "Tap to play" : "Paused", field, 0xFFFFFFFF));
+        }
+    }
+
     @Override
     protected void drawClient(Canvas c) {
+        Art art = art();
+        if (art != null) {
+            drawWithArt(c, art);
+            return;
+        }
         c.drawColor(0xFF000000);
         paint.setColor(0xFF202020);
         c.drawRect(field, paint);

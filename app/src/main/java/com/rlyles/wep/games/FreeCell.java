@@ -2,6 +2,7 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -14,6 +15,8 @@ import android.view.ViewConfiguration;
 
 import com.rlyles.wep.cards.Card;
 import com.rlyles.wep.cards.CardGame;
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.Win95;
 
@@ -289,8 +292,21 @@ public final class FreeCell extends CardGame {
         paint.setStyle(Paint.Style.FILL);
     }
 
+    private static Bitmap kingArt(Media m, String id16, String id32) {
+        Bitmap b = m.bitmap("freecell.exe", id16);
+        return b != null ? b : m.bitmap("freecell.exe", id32);
+    }
+
     /** The king between the free cells and home cells turns to look at your last move. */
     private void drawKing(Canvas c) {
+        // The original's three kings: looking right, looking left and smiling (16- and 32-bit names).
+        Media m = Media.get();
+        Bitmap k = model.won() ? kingArt(m, "3", "KINGSMILE")
+                : kingLooksLeft ? kingArt(m, "2", "KINGLEFT") : kingArt(m, "1", "KINGBITMAP");
+        if (k != null) {
+            Sprites.draw(c, k, king);
+            return;
+        }
         c.save();
         if (!kingLooksLeft) {
             c.scale(-1, 1, king.centerX(), king.centerY());

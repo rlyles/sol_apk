@@ -2,12 +2,15 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.Win95;
 import com.rlyles.wep.win.WinApp;
@@ -44,6 +47,7 @@ public final class PipeDream extends WinApp {
     private float bomb;
     private int bombCell = -1;
 
+    private static final int FLOOZ = 0xFF00D000;
     private float cell;
     private final RectF board = new RectF(), dispenser = new RectF(), fastButton = new RectF();
     private boolean fastPressed;
@@ -261,6 +265,40 @@ public final class PipeDream extends WinApp {
 
     // ---------------------------------------------------------------- drawing
 
+    /** Original bitmaps from the user's PIPE.EXE: pieces by kind, start pieces by direction. */
+    private static final class Art {
+        final Bitmap[] pieces = new Bitmap[7], starts = new Bitmap[4];
+        Bitmap empty, block;
+    }
+
+    private static Art art() {
+        return Media.get().cached("pipe.art", m -> {
+            if (!m.hasArt("pipe.exe")) {
+                return null;
+            }
+            Art a = new Art();
+            int[] pieceIds = {123, 124, 129, 126, 125, 128, 127}; // H, V, cross, NE, NW, SE, SW
+            int[] startIds = {111, 112, 113, 110}; // opening up, right, down, left
+            for (int i = 0; i < pieceIds.length; i++) {
+                a.pieces[i] = m.bitmap("pipe.exe", Integer.toString(pieceIds[i]));
+            }
+            for (int i = 0; i < 4; i++) {
+                a.starts[i] = m.bitmap("pipe.exe", Integer.toString(startIds[i]));
+            }
+            a.empty = m.bitmap("pipe.exe", "120");
+            a.block = m.bitmap("pipe.exe", "301");
+            for (Bitmap b : a.pieces) {
+                if (b == null) {
+                    return null;
+                }
+            }
+            return a.empty == null || a.block == null || a.starts[3] == null ? null : a;
+        });
+    }
+
+    /** With the original art the pipes are bitmaps, and only the flooz is drawn over them. */
+    private boolean floozOnly;
+
     @Override
     protected void layoutClient(RectF r) {
         float pad = 8 * dp;
@@ -276,11 +314,22 @@ public final class PipeDream extends WinApp {
     protected void drawClient(Canvas c) {
         c.drawColor(0xFF606060);
         ui.sunken(c, new RectF(board.left - 3 * dp, board.top - 3 * dp, board.right + 3 * dp, board.bottom + 3 * dp), Win95.FACE);
+        Art art = art();
+        floozOnly = art != null;
         for (int i = 0; i < GW * GH; i++) {
             float x = board.left + (i % GW) * cell, y = board.top + (i / GW) * cell;
             RectF r = new RectF(x, y, x + cell, y + cell);
-            ui.raised(c, r);
+            if (art != null) {
+                int g = grid[i];
+                Sprites.draw(c, g == BLOCK ? art.block : g == START ? art.starts[startDir] : g >= 0 ? art.pieces[g]
+                        : art.empty, r);
+            } else {
+                ui.raised(c, r);
+            }
             if (grid[i] == BLOCK) {
+                if (art != null) {
+                    continue;
+                }
                 paint.setColor(0xFF404040);
                 c.drawRect(x + cell * 0.12f, y + cell * 0.12f, x + cell * 0.88f, y + cell * 0.88f, paint);
                 paint.setColor(0xFF707070);
@@ -300,7 +349,11 @@ public final class PipeDream extends WinApp {
         for (int i = 0; i < queue.size(); i++) {
             float s = cell * 0.95f;
             float x = dispenser.centerX() - s / 2, y = dispenser.top + 0.1f * cell + i * cell;
-            ui.raised(c, new RectF(x, y, x + s, y + s));
+            if (art != null) {
+                Sprites.draw(c, art.pieces[queue.get(i)], x, y, s, s);
+            } else {
+                ui.raised(c, new RectF(x, y, x + s, y + s));
+            }
             drawPipe(c, queue.get(i), x, y, s, 0, -1);
             if (i == queue.size() - 1) {
                 paint.setStyle(Paint.Style.STROKE);
@@ -327,10 +380,14 @@ public final class PipeDream extends WinApp {
         float cx = x + cell / 2, cy = y + cell / 2;
         boolean full = flowing || over || levelDone;
         tube(c, cx, cy, cx + DX[startDir] * cell / 2, cy + DY[startDir] * cell / 2, cell, full ? 1 : 0, false);
-        paint.setColor(0xFF303030);
-        c.drawCircle(cx, cy, cell * 0.28f, paint);
-        paint.setColor(full || flowing ? 0xFF00E000 : 0xFF808080);
-        c.drawCircle(cx, cy, cell * 0.2f, paint);
+        if (!floozOnly) {
+            paint.setColor(0xFF303030);
+            c.drawCircle(cx, cy, cell * 0.28f, paint);
+        }
+        if (!floozOnly || full) {
+            paint.setColor(full || flowing ? FLOOZ : 0xFF808080);
+            c.drawCircle(cx, cy, cell * 0.2f, paint);
+        }
         if (!flowing && !over && !levelDone) {
             ui.withFont(Math.max(8, cell / dp * 0.28f), true, () -> ui.centered(c, String.valueOf((int) Math.ceil(countdown)),
                     new RectF(x, y, x + cell, y + cell), 0xFFFFFFFF));
@@ -368,15 +425,17 @@ public final class PipeDream extends WinApp {
     private void tube(Canvas c, float x0, float y0, float x1, float y1, float s, float amount, boolean fromEdge) {
         paint.setStrokeCap(Paint.Cap.SQUARE);
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(s * 0.36f);
-        paint.setColor(0xFF000000);
-        c.drawLine(x0, y0, x1, y1, paint);
-        paint.setStrokeWidth(s * 0.26f);
-        paint.setColor(0xFF909090);
-        c.drawLine(x0, y0, x1, y1, paint);
+        if (!floozOnly) {
+            paint.setStrokeWidth(s * 0.36f);
+            paint.setColor(0xFF000000);
+            c.drawLine(x0, y0, x1, y1, paint);
+            paint.setStrokeWidth(s * 0.26f);
+            paint.setColor(0xFF909090);
+            c.drawLine(x0, y0, x1, y1, paint);
+        }
         if (amount > 0) {
-            paint.setStrokeWidth(s * 0.16f);
-            paint.setColor(0xFF00D000);
+            paint.setStrokeWidth(s * (floozOnly ? 0.2f : 0.16f));
+            paint.setColor(FLOOZ);
             float ax = fromEdge ? x1 : x0, ay = fromEdge ? y1 : y0;
             float sign = fromEdge ? 1 : -1;
             c.drawLine(ax, ay, ax + sign * (x0 - x1) * amount, ay + sign * (y0 - y1) * amount, paint);

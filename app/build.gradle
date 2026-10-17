@@ -34,6 +34,7 @@ android {
                 systemProperty 'robolectric.graphicsMode', 'NATIVE'
                 systemProperty 'screenshotDir', System.getProperty('screenshotDir', '')
                 systemProperty 'cardsDll', System.getProperty('cardsDll', '')
+                systemProperty 'mediaDir', System.getProperty('mediaDir', '')
             }
         }
     }

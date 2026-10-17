@@ -233,6 +233,19 @@ public abstract class WinApp extends RetroView {
         host.sfx().play(s);
     }
 
+    /** Plays one of the original WAVs if the user imported it, otherwise {@code fallback}. */
+    protected void sound(String wav, int fallback) {
+        host.sfx().play(wav, fallback);
+    }
+
+    /** The user imported or removed original game files: rebuild anything drawn from them. */
+    public void mediaChanged() {
+        if (getWidth() > 0) {
+            layoutClient(clientRect());
+        }
+        invalidate();
+    }
+
     /** Standard Help menu: help topics and About. */
     protected void addHelpMenu(List<Menu> menus, String helpBody, String aboutBody) {
         menus.add(new Menu("&Help", items -> {

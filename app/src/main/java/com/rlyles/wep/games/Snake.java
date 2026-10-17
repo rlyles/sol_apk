@@ -2,12 +2,15 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.WinApp;
 
@@ -315,6 +318,51 @@ public final class Snake extends WinApp {
 
     @Override
     protected void drawClient(Canvas c) {
+        drawField(c);
+    }
+
+    /** The original's 8x8 snake pieces from the user's SNAKE.EXE (colour or black and white), or null. */
+    private static Bitmap[] art(boolean color) {
+        return Media.get().cached("snake.art" + color, m -> {
+            Bitmap strip = m.bitmap("snake.exe", color ? "200" : "201");
+            if (strip == null || strip.getHeight() < 18 * 8) {
+                return null;
+            }
+            Bitmap[] a = new Bitmap[18];
+            for (int i = 0; i < 18; i++) {
+                a[i] = Sprites.slice(strip, 0, i * 8, 8, 8);
+            }
+            return a;
+        });
+    }
+
+    /** Direction from cell a to its neighbour b: 0 up, 1 right, 2 down, 3 left. */
+    private static int dirTo(int a, int b) {
+        return b == a - GW ? 0 : b == a + 1 ? 1 : b == a + GW ? 2 : 3;
+    }
+
+    /**
+     * Strip pieces: heads facing up/right/down/left are 4-7, tails joined up/right/down/left 8-11,
+     * corners up+right, right+down, down+left, up+left 12-15, and straight up-down 16, left-right 17.
+     */
+    private void drawBody(Canvas c, Bitmap[] a) {
+        Integer[] segs = body.toArray(new Integer[0]);
+        for (int k = 0; k < segs.length; k++) {
+            int seg = segs[k], frame;
+            if (k == 0) {
+                frame = segs.length > 1 ? 4 + dirTo(segs[1], seg) : 4;
+            } else if (k == segs.length - 1) {
+                frame = 8 + dirTo(seg, segs[k - 1]);
+            } else {
+                int d1 = dirTo(seg, segs[k - 1]), d2 = dirTo(seg, segs[k + 1]);
+                int mask = 1 << d1 | 1 << d2;
+                frame = mask == 5 ? 16 : mask == 10 ? 17 : mask == 3 ? 12 : mask == 6 ? 13 : mask == 12 ? 14 : 15;
+            }
+            Sprites.draw(c, a[frame], field.left + (seg % GW) * cell, field.top + (seg / GW) * cell, cell, cell);
+        }
+    }
+
+    private void drawField(Canvas c) {
         c.drawColor(0xFF000000);
         paint.setColor(color ? 0xFF000080 : 0xFF000000);
         c.drawRect(field, paint);
@@ -347,8 +395,12 @@ public final class Snake extends WinApp {
             paint.setTextAlign(Paint.Align.LEFT);
             paint.setFakeBoldText(false);
         }
+        Bitmap[] art = art(color);
+        if (art != null) {
+            drawBody(c, art);
+        }
         boolean first = true;
-        for (int seg : body) {
+        for (int seg : art != null ? new ArrayDeque<Integer>() : body) {
             float x = field.left + (seg % GW) * cell, y = field.top + (seg / GW) * cell;
             paint.setColor(first ? (color ? 0xFFFFFF00 : 0xFFFFFFFF) : color ? 0xFF00E000 : 0xFFC0C0C0);
             c.drawRoundRect(x + 1, y + 1, x + cell - 1, y + cell - 1, cell * 0.3f, cell * 0.3f, paint);

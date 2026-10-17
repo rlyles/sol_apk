@@ -11,6 +11,8 @@ import android.graphics.Typeface;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.WinApp;
 
@@ -341,6 +343,40 @@ public final class Taipei extends WinApp {
         }, 300);
     }
 
+    // ---------------------------------------------------------------- original tiles
+
+    /** Resource numbers of each tile kind in the 16-bit TP.EXE and in the later 32-bit TAIPEI.EXE. */
+    private static final int[] TP_IDS = tileIds(19, 10, 30, 29, 31, 28, 32, 33, 34, 42, 40, 41, 39, 36, 37, 38, 35);
+    private static final int[] PE_IDS = tileIds(10, 19, 30, 29, 31, 28, 33, 34, 32, 40, 41, 42, 39, 37, 35, 38, 36);
+
+    private static int[] tileIds(int dots, int bamboo, int... honours) {
+        int[] ids = new int[KINDS];
+        for (int i = 0; i < 9; i++) {
+            ids[i] = dots + i;
+            ids[9 + i] = bamboo + i;
+            ids[18 + i] = 1 + i;
+        }
+        System.arraycopy(honours, 0, ids, 27, honours.length);
+        return ids;
+    }
+
+    /** The original tile faces from the user's TP.EXE (or TAIPEI.EXE), or null. */
+    private static Bitmap[] art() {
+        return Media.get().cached("taipei.art", m -> {
+            boolean tp = m.hasArt("tp.exe");
+            String file = tp ? "tp.exe" : "taipei.exe";
+            int[] ids = tp ? TP_IDS : PE_IDS;
+            Bitmap[] a = new Bitmap[KINDS];
+            for (int k = 0; k < KINDS; k++) {
+                a[k] = m.bitmap(file, Integer.toString(ids[k]));
+                if (a[k] == null) {
+                    return null;
+                }
+            }
+            return a;
+        });
+    }
+
     // ---------------------------------------------------------------- layout
 
     @Override
@@ -348,9 +384,11 @@ public final class Taipei extends WinApp {
         float pad = 8 * dp;
         // 15 tiles across plus up to four layers of depth; 8 tiles down.
         float byW = (r.width() - 2 * pad) / (15 + 4 * 0.14f);
-        float byH = (r.height() - 2 * pad) / (8 * 1.28f + 4 * 0.14f);
+        // The original's tiles are square; the built-in ones are taller, like real mahjong tiles.
+        float aspect = art() != null ? 1f : 1.28f;
+        float byH = (r.height() - 2 * pad) / (8 * aspect + 4 * 0.14f);
         tw = Math.min(byW, byH);
-        th = tw * 1.28f;
+        th = tw * aspect;
         depth = tw * 0.14f;
         float boardW = 15 * tw + 4 * depth, boardH = 8 * th + 4 * depth;
         originX = r.centerX() - boardW / 2 + depth;
@@ -422,11 +460,16 @@ public final class Taipei extends WinApp {
         paint.setColor(0xFF000000);
         c.drawPath(body, paint);
         paint.setStyle(Paint.Style.FILL);
-        Bitmap face = faces[kind[i]];
-        if (face == null) {
-            face = faces[kind[i]] = renderFace(kind[i], faceW, faceH);
+        Bitmap[] art = art();
+        if (art != null) {
+            Sprites.draw(c, art[kind[i]], x, y, faceW, faceH);
+        } else {
+            Bitmap face = faces[kind[i]];
+            if (face == null) {
+                face = faces[kind[i]] = renderFace(kind[i], faceW, faceH);
+            }
+            c.drawBitmap(face, x, y, null);
         }
-        c.drawBitmap(face, x, y, null);
         boolean lit = i == selected || hintPair != null && (hintPair[0] == i || hintPair[1] == i);
         if (lit) {
             paint.setColor(i == selected ? 0x80000080 : 0x80FF8000);

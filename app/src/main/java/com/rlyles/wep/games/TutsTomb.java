@@ -2,6 +2,7 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
@@ -14,6 +15,8 @@ import android.view.MotionEvent;
 import com.rlyles.wep.cards.Card;
 import com.rlyles.wep.cards.CardGame;
 import com.rlyles.wep.cards.Deck;
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.Win95;
 
@@ -399,19 +402,31 @@ public final class TutsTomb extends CardGame {
         return new float[] {left + (6 - r) * cw / 2f + k * cw, top + r * rowStep};
     }
 
-    @Override
-    protected void drawClient(Canvas c) {
-        // A sandy tomb wall behind the pyramid.
+    /** A sandy pyramid on a tomb wall (the built-in background). */
+    private void drawTomb(Canvas c, float apex, float base) {
         paint.setShader(new LinearGradient(0, client.top, 0, client.bottom, 0xFF0A4A6A, 0xFF5A3A10, Shader.TileMode.CLAMP));
         c.drawRect(client, paint);
         paint.setShader(null);
         Path p = new Path();
-        p.moveTo(client.centerX(), top - cw * 0.15f);
-        p.lineTo(left + 7 * cw + cw * 0.3f, top + 6 * rowStep + ch + cw * 0.1f);
-        p.lineTo(left - cw * 0.3f, top + 6 * rowStep + ch + cw * 0.1f);
+        p.moveTo(client.centerX(), apex);
+        p.lineTo(left + 7 * cw + cw * 0.3f, base);
+        p.lineTo(left - cw * 0.3f, base);
         p.close();
         paint.setColor(0xFFC8A050);
         c.drawPath(p, paint);
+    }
+
+    @Override
+    protected void drawClient(Canvas c) {
+        float apex = top - cw * 0.15f, base = top + 6 * rowStep + ch + cw * 0.1f;
+        Bitmap pyramidArt = Media.get().bitmap("tutstomb.exe", "1");
+        if (pyramidArt != null) {
+            // The original's brick pyramid on its green table, stretched to fit under the cards.
+            c.drawColor(pyramidArt.getPixel(0, 0));
+            Sprites.draw(c, pyramidArt, new RectF(left - cw * 0.3f, apex, left + 7 * cw + cw * 0.3f, base));
+        } else {
+            drawTomb(c, apex, base);
+        }
         if (paused) {
             ui.withFont(22, true, () -> ui.centered(c, "Paused", client, 0xFFFFFFFF));
             return;

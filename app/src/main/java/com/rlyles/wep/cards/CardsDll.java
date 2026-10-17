@@ -3,23 +3,25 @@ package com.rlyles.wep.cards;
 import android.graphics.Bitmap;
 import android.graphics.Color;
 
+import com.rlyles.wep.media.Dib;
+import com.rlyles.wep.media.ResFile;
+
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeMap;
 
 /**
  * Reads the card bitmaps out of a Windows cards.dll supplied by the user.
  *
- * <p>Only the PE resource directory is parsed; nothing in the DLL is executed. Faces are bitmap
+ * <p>Both the 16-bit DLL from Windows 3.x/95 and the 32-bit one from later versions work. Only
+ * the resource directory is read; nothing in the DLL is executed. Faces are bitmap
  * ids 1-52 (clubs, diamonds, hearts, spades; ace to king), card backs live in 53-66, and 67/68
  * are the "X" and "O" markers drawn on an empty stock.
  */
 public final class CardsDll {
     public static final int CARD_W = 71, CARD_H = 96;
-    private static final int RT_BITMAP = 2;
 
     public final Bitmap[] faces = new Bitmap[52];
     public final List<Bitmap> backs = new ArrayList<>();
@@ -61,6 +63,21 @@ public final class CardsDll {
         return art;
     }
 
+    /**
+     * A deck from bitmaps found elsewhere (TriPeaks keeps its own smaller deck in TRIPEAKS.EXE):
+     * 52 faces in cards.dll order and at least one back.
+     */
+    public static CardsDll fromBitmaps(Bitmap[] faces, List<Bitmap> backs) {
+        CardsDll art = new CardsDll();
+        for (int i = 0; i < 52; i++) {
+            art.faces[i] = roundCorners(faces[i], true);
+        }
+        for (Bitmap b : backs) {
+            art.backs.add(roundCorners(b, false));
+        }
+        return art;
+    }
+
     private static boolean hasColour(Bitmap b) {
         for (int y = 0; y < b.getHeight(); y += 3) {
             for (int x = 0; x < b.getWidth(); x += 3) {
@@ -74,171 +91,21 @@ public final class CardsDll {
         return false;
     }
 
-    // ---------------------------------------------------------------- PE resources
-
     private static TreeMap<Integer, byte[]> readBitmapResources(byte[] data) throws IOException {
-        try {
-            ByteBuffer bb = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
-            if (u16(bb, 0) != 0x5A4D) {
-                throw new IOException("Not a Windows DLL.");
-            }
-            int pe = bb.getInt(0x3C);
-            if (bb.getInt(pe) != 0x00004550) {
-                throw new IOException("Not a Windows DLL.");
-            }
-            int sectionCount = u16(bb, pe + 6);
-            int optSize = u16(bb, pe + 20);
-            int opt = pe + 24;
-            int magic = u16(bb, opt);
-            int dataDirs = opt + (magic == 0x20B ? 112 : 96);
-            int resourceRva = bb.getInt(dataDirs + 2 * 8);
-            if (resourceRva == 0) {
-                throw new IOException("This DLL has no resources.");
-            }
-            int sections = opt + optSize;
-            int[][] sec = new int[sectionCount][];
-            for (int i = 0; i < sectionCount; i++) {
-                int s = sections + i * 40;
-                sec[i] = new int[] {bb.getInt(s + 12), Math.max(bb.getInt(s + 8), bb.getInt(s + 16)), bb.getInt(s + 20)};
-            }
-            int root = rvaToOffset(sec, resourceRva);
-
-            TreeMap<Integer, byte[]> out = new TreeMap<>();
-            int typeDir = findEntry(bb, root, RT_BITMAP);
-            if (typeDir == NOT_FOUND || (typeDir & 0x80000000) == 0) {
-                return out;
-            }
-            int namesDir = root + (typeDir & 0x7FFFFFFF);
-            int count = u16(bb, namesDir + 12) + u16(bb, namesDir + 14);
-            for (int i = 0; i < count; i++) {
-                int entry = namesDir + 16 + i * 8;
-                int name = bb.getInt(entry);
-                int target = bb.getInt(entry + 4);
-                if ((name & 0x80000000) != 0 || (target & 0x80000000) == 0) {
-                    continue; // named resources are not card bitmaps
-                }
-                int langDir = root + (target & 0x7FFFFFFF);
-                if (u16(bb, langDir + 12) + u16(bb, langDir + 14) == 0) {
-                    continue;
-                }
-                int leaf = bb.getInt(langDir + 16 + 4);
-                if ((leaf & 0x80000000) != 0) {
-                    continue;
-                }
-                int dataEntry = root + leaf;
-                int off = rvaToOffset(sec, bb.getInt(dataEntry));
-                int size = bb.getInt(dataEntry + 4);
-                if (off < 0 || size <= 0 || off + size > data.length) {
-                    continue;
-                }
-                byte[] dib = new byte[size];
-                System.arraycopy(data, off, dib, 0, size);
-                out.put(name, dib);
-            }
-            return out;
-        } catch (IndexOutOfBoundsException e) {
-            throw new IOException("The DLL is damaged or truncated.");
-        }
-    }
-
-    /** Subdirectory offsets have the top bit set, so "missing" can't simply be any negative number. */
-    private static final int NOT_FOUND = -1;
-
-    private static int findEntry(ByteBuffer bb, int dir, int id) {
-        int count = u16(bb, dir + 12) + u16(bb, dir + 14);
-        for (int i = 0; i < count; i++) {
-            int entry = dir + 16 + i * 8;
-            if (bb.getInt(entry) == id) {
-                return bb.getInt(entry + 4);
+        TreeMap<Integer, byte[]> out = new TreeMap<>();
+        for (Map.Entry<String, byte[]> e : ResFile.parse(data).type(ResFile.BITMAP).entrySet()) {
+            try {
+                out.put(Integer.parseInt(e.getKey()), e.getValue());
+            } catch (NumberFormatException ignored) {
+                // named resources are not card bitmaps
             }
         }
-        return NOT_FOUND;
+        return out;
     }
 
-    private static int rvaToOffset(int[][] sections, int rva) throws IOException {
-        for (int[] s : sections) {
-            if (rva >= s[0] && rva < s[0] + s[1]) {
-                return s[2] + rva - s[0];
-            }
-        }
-        throw new IOException("The DLL is damaged.");
-    }
-
-    private static int u16(ByteBuffer bb, int off) {
-        return bb.getShort(off) & 0xFFFF;
-    }
-
-    // ---------------------------------------------------------------- DIB decoding
-
-    /** Decodes an uncompressed device-independent bitmap (as stored in RT_BITMAP resources). */
+    /** Decodes a device-independent bitmap (as stored in RT_BITMAP resources). */
     public static Bitmap decodeDib(byte[] d) throws IOException {
-        ByteBuffer bb = ByteBuffer.wrap(d).order(ByteOrder.LITTLE_ENDIAN);
-        int headerSize = bb.getInt(0);
-        int w, h, bpp, compression = 0, colorsUsed = 0, paletteEntry;
-        if (headerSize == 12) { // BITMAPCOREHEADER
-            w = u16(bb, 4);
-            h = bb.getShort(6);
-            bpp = u16(bb, 10);
-            paletteEntry = 3;
-        } else if (headerSize >= 40) { // BITMAPINFOHEADER and later
-            w = bb.getInt(4);
-            h = bb.getInt(8);
-            bpp = u16(bb, 14);
-            compression = bb.getInt(16);
-            colorsUsed = bb.getInt(32);
-            paletteEntry = 4;
-        } else {
-            throw new IOException("Unsupported bitmap header.");
-        }
-        if (compression != 0 || w <= 0 || w > 1024 || h == 0 || Math.abs(h) > 1024) {
-            throw new IOException("Unsupported bitmap format.");
-        }
-        boolean bottomUp = h > 0;
-        h = Math.abs(h);
-        int colors = bpp <= 8 ? (colorsUsed != 0 ? colorsUsed : 1 << bpp) : 0;
-        int[] palette = new int[colors];
-        for (int i = 0; i < colors; i++) {
-            int p = headerSize + i * paletteEntry;
-            palette[i] = Color.rgb(d[p + 2] & 0xFF, d[p + 1] & 0xFF, d[p] & 0xFF);
-        }
-        int pixels = headerSize + colors * paletteEntry;
-        int stride = ((w * bpp + 31) / 32) * 4;
-        if (pixels + stride * h > d.length) {
-            throw new IOException("Truncated bitmap.");
-        }
-        int[] argb = new int[w * h];
-        for (int row = 0; row < h; row++) {
-            int y = bottomUp ? h - 1 - row : row;
-            int base = pixels + row * stride;
-            for (int xx = 0; xx < w; xx++) {
-                int c;
-                switch (bpp) {
-                    case 1:
-                        c = palette[(d[base + (xx >> 3)] >> (7 - (xx & 7))) & 1];
-                        break;
-                    case 4:
-                        c = palette[(d[base + (xx >> 1)] >> ((xx & 1) == 0 ? 4 : 0)) & 0xF];
-                        break;
-                    case 8:
-                        c = palette[d[base + xx] & 0xFF];
-                        break;
-                    case 24: {
-                        int p = base + xx * 3;
-                        c = Color.rgb(d[p + 2] & 0xFF, d[p + 1] & 0xFF, d[p] & 0xFF);
-                        break;
-                    }
-                    case 32: {
-                        int p = base + xx * 4;
-                        c = Color.rgb(d[p + 2] & 0xFF, d[p + 1] & 0xFF, d[p] & 0xFF);
-                        break;
-                    }
-                    default:
-                        throw new IOException("Unsupported bit depth " + bpp + ".");
-                }
-                argb[y * w + xx] = c;
-            }
-        }
-        return Bitmap.createBitmap(argb, w, h, Bitmap.Config.ARGB_8888);
+        return Dib.decode(d);
     }
 
     /**

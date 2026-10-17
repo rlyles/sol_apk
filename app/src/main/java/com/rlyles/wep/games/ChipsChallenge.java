@@ -4,6 +4,7 @@ import static com.rlyles.wep.games.ChipsEngine.SIZE;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -11,6 +12,9 @@ import android.graphics.RectF;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Music;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.Win95;
 import com.rlyles.wep.win.WinApp;
@@ -45,6 +49,53 @@ public final class ChipsChallenge extends WinApp {
     private boolean holding;
     private float holdX, holdY;
 
+    /** The original tile set and panel from the user's CHIPS.EXE. */
+    private static final class Art {
+        /** Opaque 32x32 tiles by CHIPS.DAT code; creatures and Chip also as see-through sprites. */
+        final Bitmap[] tiles = new Bitmap[0x70], sprites = new Bitmap[0x70];
+        /** LED digits: '-', blank, 9..0 in yellow, then the same in green. */
+        final Bitmap[] digits = new Bitmap[24];
+        Bitmap background, info;
+    }
+
+    private static Art art() {
+        return Media.get().cached("chips.art", m -> {
+            Bitmap sheet = m.bitmap("chips.exe", "OBJ32_4");
+            if (sheet == null || sheet.getWidth() < 13 * 32 || sheet.getHeight() < 16 * 32) {
+                return null;
+            }
+            Art a = new Art();
+            for (int code = 0; code < 0x70; code++) {
+                a.tiles[code] = Sprites.slice(sheet, code / 16 * 32, code % 16 * 32, 32, 32);
+            }
+            // Columns 7-9 hold the creatures on white and 10-12 their masks.
+            for (int code = 0x40; code < 0x70; code++) {
+                int col = code / 16, row = code % 16;
+                a.sprites[code] = Sprites.masked(Sprites.slice(sheet, (col + 3) * 32, row * 32, 32, 32),
+                        Sprites.slice(sheet, (col + 6) * 32, row * 32, 32, 32), true);
+            }
+            Bitmap digits = m.bitmap("chips.exe", "200");
+            if (digits != null && digits.getHeight() >= 24 * 23) {
+                for (int i = 0; i < 24; i++) {
+                    a.digits[i] = Sprites.slice(digits, 0, i * 23, Math.min(17, digits.getWidth()), 23);
+                }
+            }
+            a.background = m.bitmap("chips.exe", "BACKGROUND");
+            a.info = m.bitmap("chips.exe", "INFOWND");
+            return a;
+        });
+    }
+
+    /** The original's WAV for each ChipsEngine.SND_ event (some came with Windows, not the game). */
+    private static final String[] SOUNDS = {"blip2.wav", "door.wav", "bummer.wav", "ditty1.wav", "chimes.wav",
+            "oof3.wav", "strike.wav", "click3.wav", "pop2.wav", "water2.wav", "hit3.wav", "teleport.wav",
+            "click1.wav", "bell.wav"};
+    private static final int[] SOUND_FALLBACK = {-1, -1, Sfx.BOOM, Sfx.WIN, -1, -1, -1, Sfx.BLIP, -1, -1, Sfx.BOOM,
+            -1, -1, Sfx.BOOM};
+
+    /** Engine directions (N, E, S, W) to the order the tile set uses (N, W, S, E). */
+    private static final int[] MS_DIR = {0, 3, 2, 1};
+
     public ChipsChallenge(Context context, Host host) {
         super(context, host, "chips");
         loadLevelSet();
@@ -66,6 +117,9 @@ public final class ChipsChallenge extends WinApp {
         usingDat = false;
         levels = ChipsLevels.builtIn();
         File f = datFile();
+        if (!f.exists() && Media.get().has("chips.dat")) {
+            f = Media.get().file("chips.dat");
+        }
         if (f.exists()) {
             try (FileInputStream in = new FileInputStream(f)) {
                 byte[] data = new byte[(int) f.length()];
@@ -153,6 +207,9 @@ public final class ChipsChallenge extends WinApp {
         paused = finished = false;
         acc = 0;
         save();
+        if (isActive()) {
+            playMusic();
+        }
         invalidate();
     }
 
@@ -221,21 +278,20 @@ public final class ChipsChallenge extends WinApp {
         acc += dt;
         while (acc >= TICK) {
             acc -= TICK;
-            int chipsBefore = engine.chipsLeft;
             engine.setInput(holding ? directionTo(holdX, holdY) : -1);
             engine.tick();
-            if (engine.chipsLeft < chipsBefore) {
-                sound(Sfx.BLIP);
+            for (int i = 0; i < ChipsEngine.SND_COUNT; i++) {
+                if ((engine.sounds & 1 << i) != 0) {
+                    sound(SOUNDS[i], SOUND_FALLBACK[i]);
+                }
             }
             if (engine.dead) {
                 finished = true;
-                sound(Sfx.BOOM);
                 post(() -> messageBox("Chip's Challenge", engine.deathReason, () -> startLevel(index)));
                 return;
             }
             if (engine.won) {
                 finished = true;
-                sound(Sfx.WIN);
                 int time = engine.timed() ? engine.timeLeft : 0;
                 int best = prefs.getInt(key("time" + index), -1);
                 if (engine.timed() && time > best) {
@@ -270,6 +326,34 @@ public final class ChipsChallenge extends WinApp {
     protected void onHidden() {
         paused = true;
         holding = false;
+        Music.stop();
+    }
+
+    @Override
+    protected void onShown() {
+        playMusic();
+    }
+
+    @Override
+    public void mediaChanged() {
+        super.mediaChanged();
+        if (!usingDat && Media.get().has("chips.dat")) {
+            loadLevelSet();
+            unlocked = prefs.getInt(key("unlocked"), 0);
+            startLevel(Math.min(prefs.getInt(key("level"), 0), levels.size() - 1));
+        }
+        if (isActive()) {
+            playMusic();
+        }
+    }
+
+    /** The original alternates its two tunes from level to level. */
+    private void playMusic() {
+        if (host.sfx().enabled) {
+            Music.play(index % 2 == 0 ? "chip01.mid" : "chip02.mid");
+        } else {
+            Music.stop();
+        }
     }
 
     // ---------------------------------------------------------------- layout
@@ -309,7 +393,12 @@ public final class ChipsChallenge extends WinApp {
 
     @Override
     protected void drawClient(Canvas c) {
-        c.drawColor(0xFF008000);
+        Art art = art();
+        if (art != null && art.background != null) {
+            Sprites.tile(c, art.background, clientRect(), tile / 32, clientRect().left, clientRect().top);
+        } else {
+            c.drawColor(0xFF008000);
+        }
         ui.sunken(c, new RectF(viewRect.left - 3 * dp, viewRect.top - 3 * dp, viewRect.right + 3 * dp,
                 viewRect.bottom + 3 * dp), 0xFF000000);
         int x0 = viewX0(), y0 = viewY0();
@@ -360,25 +449,43 @@ public final class ChipsChallenge extends WinApp {
             });
             return;
         }
-        for (int i = 0; i < 3; i++) {
-            float lx, ly;
-            if (wide) {
-                lx = panel.left + pad;
-                ly = panel.top + pad + i * (ledH + 26 * dp);
-            } else {
-                lx = panel.left + pad + i * (panel.width() / 3);
-                ly = panel.top + pad;
+        Art art = art();
+        boolean[] alert = {false, engine.timed() && engine.timeLeft <= 15, engine.chipsLeft == 0};
+        float slotW = (panel.width() - 2 * pad) / 4;
+        if (wide && art != null && art.info != null && art.digits[0] != null) {
+            // The original info window, with its LED readouts in its three black boxes.
+            float k = Math.min((panel.width() - 2 * pad) / art.info.getWidth(),
+                    (panel.height() - 3 * pad - 2 * slotW) / art.info.getHeight());
+            float ix = panel.centerX() - art.info.getWidth() * k / 2, iy = panel.top + pad;
+            Sprites.drawScaled(c, art.info, ix, iy, k);
+            int[] boxTop = {34, 96, 186};
+            for (int i = 0; i < 3; i++) {
+                drawDigits(c, art, new RectF(ix + 47 * k, iy + (boxTop[i] + 3) * k, ix + 98 * k,
+                        iy + (boxTop[i] + 26) * k), values[i], alert[i]);
             }
-            float fx = lx, fy = ly;
-            String label = labels[i];
-            ui.withFont(11, true, () -> ui.label(c, label, fx, fy + 12 * dp, 0xFF000080));
-            RectF led = new RectF(lx, ly + 16 * dp, lx + ledW, ly + 16 * dp + ledH);
-            if (values[i] < 0) {
-                paint.setColor(0xFF000000);
-                c.drawRect(led, paint);
-                ui.withFont(13, true, () -> ui.centered(c, "---", led, 0xFFFF0000));
-            } else {
-                ui.led(c, led, values[i], 3);
+        } else {
+            for (int i = 0; i < 3; i++) {
+                float lx, ly;
+                if (wide) {
+                    lx = panel.left + pad;
+                    ly = panel.top + pad + i * (ledH + 26 * dp);
+                } else {
+                    lx = panel.left + pad + i * (panel.width() / 3);
+                    ly = panel.top + pad;
+                }
+                float fx = lx, fy = ly;
+                String label = labels[i];
+                ui.withFont(11, true, () -> ui.label(c, label, fx, fy + 12 * dp, 0xFF000080));
+                RectF led = new RectF(lx, ly + 16 * dp, lx + ledW, ly + 16 * dp + ledH);
+                if (values[i] < 0 && (art == null || art.digits[0] == null)) {
+                    paint.setColor(0xFF000000);
+                    c.drawRect(led, paint);
+                    ui.withFont(13, true, () -> ui.centered(c, "---", led, 0xFFFF0000));
+                } else if (art != null && art.digits[0] != null) {
+                    drawDigits(c, art, led, values[i], alert[i]);
+                } else {
+                    ui.led(c, led, values[i], 3);
+                }
             }
         }
         // Inventory: four keys over four boots.
@@ -390,7 +497,11 @@ public final class ChipsChallenge extends WinApp {
         }
         for (int i = 0; i < 8; i++) {
             float x = ix + (i % 4) * slot, y = iy + (i / 4) * slot;
-            ui.sunken(c, new RectF(x + 1, y + 1, x + slot - 1, y + slot - 1), 0xFFC0C0C0);
+            if (art != null) {
+                drawTerrain(c, ChipsEngine.FLOOR, x, y, slot);
+            } else {
+                ui.sunken(c, new RectF(x + 1, y + 1, x + slot - 1, y + slot - 1), 0xFFC0C0C0);
+            }
             boolean have = i < 4 ? engine.keyCount[i] > 0 : engine.boots[i - 4];
             if (have) {
                 drawTerrain(c, i < 4 ? ChipsEngine.KEY_BLUE + i : ChipsEngine.FLIPPERS + i - 4, x, y, slot);
@@ -398,9 +509,30 @@ public final class ChipsChallenge extends WinApp {
         }
     }
 
+    /** Three of the original LED digits; green, or yellow when time is short or the chips are in. */
+    private static void drawDigits(Canvas c, Art art, RectF r, int value, boolean alert) {
+        float w = r.width() / 3;
+        int base = alert ? 0 : 12;
+        for (int i = 0; i < 3; i++) {
+            int cell;
+            if (value < 0) {
+                cell = 0;
+            } else {
+                int place = (int) Math.pow(10, 2 - i);
+                cell = value < place && i < 2 ? 1 : 2 + 9 - (value / place) % 10;
+            }
+            Sprites.draw(c, art.digits[base + cell], r.left + i * w, r.top, w, r.height());
+        }
+    }
+
     // ---------------------------------------------------------------- tile art (original drawings)
 
     private void drawTerrain(Canvas c, int t, float x, float y, float s) {
+        Art art = art();
+        if (art != null && t >= 0 && t < 0x70) {
+            Sprites.draw(c, art.tiles[t], x, y, s, s);
+            return;
+        }
         RectF r = new RectF(x, y, x + s, y + s);
         paint.setStyle(Paint.Style.FILL);
         switch (t) {
@@ -697,6 +829,17 @@ public final class ChipsChallenge extends WinApp {
     }
 
     private void drawCreature(Canvas c, int kind, int dir, float x, float y, float s) {
+        Art art = art();
+        if (art != null) {
+            if (kind == ChipsEngine.BLOCK) {
+                Sprites.draw(c, art.tiles[ChipsEngine.BLOCK_TILE], x, y, s, s);
+                return;
+            }
+            if (kind <= ChipsEngine.PARAMECIUM) {
+                Sprites.draw(c, art.sprites[0x40 + kind * 4 + MS_DIR[dir & 3]], x, y, s, s);
+                return;
+            }
+        }
         float cx = x + s / 2, cy = y + s / 2;
         switch (kind) {
             case ChipsEngine.BLOCK:
@@ -783,6 +926,12 @@ public final class ChipsChallenge extends WinApp {
     }
 
     private void drawChip(Canvas c, int dir, float x, float y, float s, boolean swimming) {
+        Art art = art();
+        if (art != null) {
+            Sprites.draw(c, swimming ? art.tiles[0x3C + MS_DIR[dir & 3]] : art.sprites[0x6C + MS_DIR[dir & 3]],
+                    x, y, s, s);
+            return;
+        }
         float cx = x + s / 2;
         if (swimming) {
             paint.setColor(0xFFFFD0A0);

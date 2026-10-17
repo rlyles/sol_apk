@@ -2,6 +2,7 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.RectF;
 import android.view.KeyEvent;
@@ -9,7 +10,9 @@ import android.view.MotionEvent;
 
 import com.rlyles.wep.cards.Card;
 import com.rlyles.wep.cards.CardGame;
+import com.rlyles.wep.cards.CardsDll;
 import com.rlyles.wep.cards.Deck;
+import com.rlyles.wep.media.Media;
 import com.rlyles.wep.win.Sfx;
 
 import java.util.ArrayList;
@@ -48,6 +51,32 @@ public final class TriPeaks extends CardGame {
         if (!load()) {
             deal();
         }
+    }
+
+    /** TriPeaks has its own, smaller deck in TRIPEAKS.EXE: faces 1-52 and backs 60-67. */
+    @Override
+    protected CardsDll deckArt() {
+        CardsDll own = Media.get().cached("tripeaks.deck", m -> {
+            if (!m.hasArt("tripeaks.exe")) {
+                return null;
+            }
+            Bitmap[] faces = new Bitmap[52];
+            for (int i = 0; i < 52; i++) {
+                faces[i] = m.bitmap("tripeaks.exe", Integer.toString(i + 1));
+                if (faces[i] == null) {
+                    return null;
+                }
+            }
+            List<Bitmap> backs = new ArrayList<>();
+            for (int id = 60; id <= 67; id++) {
+                Bitmap b = m.bitmap("tripeaks.exe", Integer.toString(id));
+                if (b != null) {
+                    backs.add(b);
+                }
+            }
+            return backs.isEmpty() ? null : CardsDll.fromBitmaps(faces, backs);
+        });
+        return own != null ? own : super.deckArt();
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.rlyles.wep.games;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -9,6 +10,8 @@ import android.graphics.RectF;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.Win95;
 import com.rlyles.wep.win.WinApp;
@@ -381,8 +384,54 @@ public final class RodentsRevenge extends WinApp {
         board.set(r.centerX() - s / 2, r.centerY() - s / 2, r.centerX() + s / 2, r.centerY() + s / 2);
     }
 
+    /**
+     * The original 16-pixel sprite sheet, a 9x3 grid inside the Visual Basic forms of the user's
+     * RODENT.EXE, or null.
+     */
+    private static Bitmap[] art() {
+        return Media.get().cached("rodent.art", m -> {
+            Bitmap sheet = m.embeddedBitmap("rodent.exe", 3);
+            if (sheet == null || sheet.getWidth() < 144 || sheet.getHeight() < 48) {
+                return null;
+            }
+            Bitmap[] a = new Bitmap[27];
+            for (int i = 0; i < 27; i++) {
+                a[i] = Sprites.slice(sheet, i % 9 * 16, i / 9 * 16, 16, 16);
+            }
+            return a;
+        });
+    }
+
+    // Cells of that grid.
+    private static final int A_FLOOR = 0, A_SINK = 1, A_BLOCK = 2, A_CHEESE = 7, A_MOUSE = 8, A_CAT = 9,
+            A_SQUASHED = 19, A_WALL = 24;
+
+    private void drawWithArt(Canvas c, Bitmap[] a) {
+        c.drawColor(0xFF808000);
+        int[] tiles = {A_FLOOR, A_WALL, A_BLOCK, A_CHEESE, A_SINK};
+        for (int i = 0; i < N * N; i++) {
+            Sprites.draw(c, a[tiles[grid[i]]], board.left + (i % N) * cell, board.top + (i / N) * cell, cell, cell);
+        }
+        for (int[] cat : cats) {
+            Sprites.draw(c, a[A_CAT], board.left + (cat[0] % N) * cell, board.top + (cat[0] / N) * cell, cell, cell);
+        }
+        Sprites.draw(c, a[deadTime > 0 && ((int) (deadTime * 8) & 1) == 1 ? A_SQUASHED : A_MOUSE],
+                board.left + (mouse % N) * cell, board.top + (mouse / N) * cell, cell, cell);
+        for (int i = 0; i < lives; i++) {
+            Sprites.draw(c, a[A_MOUSE], board.left + i * cell, board.top, cell, cell);
+        }
+        if (over || paused) {
+            ui.withFont(20, true, () -> ui.centered(c, over ? "Tap to play" : "Paused", board, Win95.DARK));
+        }
+    }
+
     @Override
     protected void drawClient(Canvas c) {
+        Bitmap[] art = art();
+        if (art != null) {
+            drawWithArt(c, art);
+            return;
+        }
         c.drawColor(0xFF808000);
         paint.setColor(0xFFFFFFC0);
         c.drawRect(board, paint);

@@ -54,6 +54,14 @@ public final class ChipsEngine {
     public final boolean[] boots = new boolean[4];
     public int chipsLeft, timeLeft, ticks;
     public boolean won, dead;
+
+    /** Sounds the last tick made, as SND_ bits (the original game's sound events, in its order). */
+    public int sounds;
+    public static final int SND_TOOL = 1, SND_DOOR = 1 << 1, SND_DEATH = 1 << 2, SND_EXIT = 1 << 3,
+            SND_SOCKET = 1 << 4, SND_BLOCKED = 1 << 5, SND_THIEF = 1 << 6, SND_CHIP = 1 << 7, SND_SWITCH = 1 << 8,
+            SND_SPLASH = 1 << 9, SND_BOMB = 1 << 10, SND_TELEPORT = 1 << 11, SND_TICK = 1 << 12,
+            SND_TIMEOUT = 1 << 13, SND_COUNT = 14;
+    private boolean wasBlocked;
     public String deathReason = "";
     public String hint = "";
     public boolean onHint;
@@ -304,6 +312,7 @@ public final class ChipsEngine {
     }
 
     public void tick() {
+        sounds = 0;
         if (won || dead) {
             return;
         }
@@ -338,10 +347,16 @@ public final class ChipsEngine {
             if (terrain[chip.pos] == TRAP && !trapOpen(chip.pos)) {
                 // stuck
             } else {
-                move(chip, input);
+                boolean moved = move(chip, input);
+                if (!moved && !wasBlocked) {
+                    sounds |= SND_BLOCKED;
+                }
+                wasBlocked = !moved;
                 chipCooldown = 2;
                 afterChipMove();
             }
+        } else if (input < 0) {
+            wasBlocked = false;
         }
         if (dead || won) {
             return;
@@ -385,6 +400,9 @@ public final class ChipsEngine {
             timeLeft--;
             if (timeLeft <= 0) {
                 die("Ooops! Out of time!");
+                sounds = sounds & ~SND_DEATH | SND_TIMEOUT;
+            } else if (timeLeft <= 15) {
+                sounds |= SND_TICK;
             }
         }
     }
@@ -397,6 +415,7 @@ public final class ChipsEngine {
         if (!dead) {
             dead = true;
             deathReason = why;
+            sounds |= SND_DEATH;
         }
     }
 
@@ -488,6 +507,7 @@ public final class ChipsEngine {
                     return false;
                 }
                 terrain[to] = FLOOR;
+                sounds |= SND_SOCKET;
                 return true;
             case DOOR_BLUE:
             case DOOR_RED:
@@ -502,6 +522,7 @@ public final class ChipsEngine {
                 }
                 keys[k] = keyCount[k] > 0;
                 terrain[to] = FLOOR;
+                sounds |= SND_DOOR;
                 return true;
             }
             default:
@@ -587,16 +608,19 @@ public final class ChipsEngine {
             if (t == WATER) {
                 terrain[pos] = DIRT;
                 c.dead = true;
+                sounds |= SND_SPLASH;
                 return;
             }
             if (t == BOMB) {
                 terrain[pos] = FLOOR;
                 c.dead = true;
+                sounds |= SND_BOMB;
                 return;
             }
         } else if (t == BOMB) {
             terrain[pos] = FLOOR;
             c.dead = true;
+            sounds |= SND_BOMB;
             return;
         }
         if (c.dead || dead) {
@@ -618,6 +642,7 @@ public final class ChipsEngine {
             case WATER:
                 if (!boots[0]) {
                     die("Ooops! Chip can't swim without flippers!");
+                    sounds |= SND_SPLASH;
                 }
                 break;
             case FIRE:
@@ -628,6 +653,7 @@ public final class ChipsEngine {
             case BOMB:
                 terrain[pos] = FLOOR;
                 die("Ooops! Don't touch the bombs!");
+                sounds |= SND_BOMB;
                 break;
             case DIRT:
                 terrain[pos] = FLOOR;
@@ -635,6 +661,7 @@ public final class ChipsEngine {
             case CHIP:
                 terrain[pos] = FLOOR;
                 chipsLeft = Math.max(0, chipsLeft - 1);
+                sounds |= SND_CHIP;
                 break;
             case KEY_BLUE:
             case KEY_RED:
@@ -643,6 +670,7 @@ public final class ChipsEngine {
                 keyCount[t - KEY_BLUE]++;
                 keys[t - KEY_BLUE] = true;
                 terrain[pos] = FLOOR;
+                sounds |= SND_TOOL;
                 break;
             case FLIPPERS:
             case FIRE_BOOTS:
@@ -650,12 +678,15 @@ public final class ChipsEngine {
             case SUCTION:
                 boots[t - FLIPPERS] = true;
                 terrain[pos] = FLOOR;
+                sounds |= SND_TOOL;
                 break;
             case THIEF:
                 java.util.Arrays.fill(boots, false);
+                sounds |= SND_THIEF;
                 break;
             case EXIT:
                 won = true;
+                sounds |= SND_EXIT;
                 break;
             case POPUP:
                 popupUnderChip = pos;
@@ -666,6 +697,9 @@ public final class ChipsEngine {
     }
 
     private void pressButton(int t, Creature by) {
+        if (t == BUTTON_GREEN || t == BUTTON_BLUE || t == BUTTON_RED || t == BUTTON_BROWN) {
+            sounds |= SND_SWITCH;
+        }
         switch (t) {
             case BUTTON_GREEN:
                 for (int i = 0; i < terrain.length; i++) {
@@ -721,6 +755,9 @@ public final class ChipsEngine {
     }
 
     private void teleport(Creature c, int dir) {
+        if (c == chip) {
+            sounds |= SND_TELEPORT;
+        }
         List<Integer> ports = new ArrayList<>();
         for (int i = 0; i < terrain.length; i++) {
             if (terrain[i] == TELEPORT) {

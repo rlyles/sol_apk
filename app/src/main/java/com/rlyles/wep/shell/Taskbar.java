@@ -10,6 +10,7 @@ import android.graphics.Shader;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
 import com.rlyles.wep.savers.Saver;
 import com.rlyles.wep.savers.Savers;
 import com.rlyles.wep.win.Icons;
@@ -186,6 +187,7 @@ public final class Taskbar extends RetroView {
             subEntries.add(new Entry("display", "Reset Split to 4:3", -1, false, shell::resetSplit));
             subEntries.add(new Entry("help", "Sound Effects", -1, shell.soundOn(),
                     () -> shell.setSound(!shell.soundOn())));
+            subEntries.add(new Entry("folder", "Original Game Files...", -1, false, this::showOriginalFiles));
         }
     }
 
@@ -563,6 +565,95 @@ public final class Taskbar extends RetroView {
         d.add(new Win95.Button("Cancel", false, () -> closeDialog(d))).at(160, used + 20, 96, 36);
         d.onCancel = () -> closeDialog(d);
         showDialog(d);
+    }
+
+    /** Start > Settings > Original Game Files: import the user's own EXEs, DLLs and sounds. */
+    public void showOriginalFiles() {
+        Media m = Media.get();
+        Win95.Dialog d = new Win95.Dialog("Original Game Files", 330, 520);
+        Win95.Text intro = d.add(new Win95.Text("Copy in the files from your own Entertainment Pack disks and the games "
+                + "use their original pictures and sounds. Pick a .zip of the game folder, or select "
+                + "the .EXE, .DLL, .WAV and .MID files (and CHIPS.DAT). Only pictures and sounds are "
+                + "read from them; no Windows code is run.", false));
+        intro.sizeDp = 13;
+        intro.at(10, 6, 310, 118);
+        List<String> rows = new ArrayList<>();
+        for (String[] game : Media.CATALOG) {
+            rows.add(game[0] + ": " + mediaStatus(m, game));
+        }
+        Win95.ListBox list = d.add(new Win95.ListBox(rows, -1));
+        list.rowDp = 26;
+        list.at(10, 128, 310, 236);
+        Win95.Check art = d.add(new Win95.Check("Use original &pictures", m.artOn()));
+        art.at(10, 370, 310, 30);
+        Win95.Check snd = d.add(new Win95.Check("Use original &sounds and music", m.soundsOn()));
+        snd.at(10, 402, 310, 30);
+        d.add(new Win95.Button("&Import Files...", false, () -> shell.pickFiles((names, data) -> {
+            Media.Result r = new Media.Result();
+            try {
+                for (int i = 0; i < names.size(); i++) {
+                    m.importFile(names.get(i), data.get(i), r);
+                }
+            } catch (java.io.IOException e) {
+                messageBox("Original Game Files", "Unable to import those files.\n\n" + e.getMessage(), null);
+                return;
+            }
+            shell.mediaChanged();
+            closeDialog(d);
+            showOriginalFiles();
+            String msg = r.added.isEmpty()
+                    ? "None of those are Entertainment Pack game files."
+                    : "Imported " + r.added.size() + (r.added.size() == 1 ? " file" : " files") + ":\n"
+                    + android.text.TextUtils.join(", ", r.added).toUpperCase(java.util.Locale.US);
+            messageBox("Original Game Files", msg, null);
+        }))).at(10, 440, 150, 34);
+        d.add(new Win95.Button("&Remove All", false, () -> confirm("Original Game Files",
+                "Remove all the imported game files from this device?", () -> {
+                    m.removeAll();
+                    shell.mediaChanged();
+                    closeDialog(d);
+                    showOriginalFiles();
+                }, null))).at(170, 440, 150, 34);
+        d.add(new Win95.Button("OK", true, () -> {
+            m.setArt(art.checked);
+            m.setSounds(snd.checked);
+            shell.mediaChanged();
+            closeDialog(d);
+        })).at(66, 482, 96, 32);
+        d.add(new Win95.Button("Cancel", false, () -> closeDialog(d))).at(170, 482, 96, 32);
+        d.onCancel = () -> closeDialog(d);
+        showDialog(d);
+    }
+
+    private static String mediaStatus(Media m, String[] game) {
+        StringBuilder found = new StringBuilder();
+        boolean missing = false;
+        for (int i = 1; i < game.length; i++) {
+            String hit = null;
+            for (String f : game[i].split("\\|")) {
+                if (m.has(f)) {
+                    hit = f;
+                    break;
+                }
+            }
+            if (hit == null) {
+                missing |= i == 1;
+                continue;
+            }
+            String what = hit.endsWith(".wav") || hit.endsWith(".mid") ? "sound" : hit.endsWith(".dat") ? "levels"
+                    : "pictures";
+            if (found.indexOf(what) >= 0) {
+                continue;
+            }
+            if (found.length() > 0) {
+                found.append(", ");
+            }
+            found.append(what);
+        }
+        if (found.length() == 0 || missing) {
+            return "needs " + game[1].split("\\|")[0].toUpperCase(java.util.Locale.US);
+        }
+        return found.toString();
     }
 
     private void showShutDown() {

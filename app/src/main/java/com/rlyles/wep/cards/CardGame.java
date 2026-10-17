@@ -26,12 +26,23 @@ public abstract class CardGame extends WinApp {
 
     protected CardGame(Context context, Host host, String appId) {
         super(context, host, appId);
-        art.setDll(host.cardsDll());
+        art.setDll(deckArt());
+    }
+
+    /** The card pictures to use: the user's cards.dll, or null for the built-in cards. */
+    protected CardsDll deckArt() {
+        return host.cardsDll();
     }
 
     @Override
     protected void onShown() {
-        art.setDll(host.cardsDll());
+        art.setDll(deckArt());
+    }
+
+    @Override
+    public void mediaChanged() {
+        art.setDll(deckArt());
+        super.mediaChanged();
     }
 
     protected int back() {
@@ -178,7 +189,7 @@ public abstract class CardGame extends WinApp {
             host.pickFile(data -> {
                 try {
                     host.setCardsDll(data);
-                    art.setDll(host.cardsDll());
+                    art.setDll(deckArt());
                     showDeckDialog();
                 } catch (java.io.IOException e) {
                     messageBox(title(), "Unable to load cards from that file.\n\n" + e.getMessage(), null);

@@ -11,6 +11,8 @@ import android.os.SystemClock;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 
+import com.rlyles.wep.media.Media;
+import com.rlyles.wep.media.Sprites;
 import com.rlyles.wep.win.Sfx;
 import com.rlyles.wep.win.Win95;
 import com.rlyles.wep.win.WinApp;
@@ -364,9 +366,16 @@ public final class Tetris extends WinApp {
 
     @Override
     protected void drawClient(Canvas c) {
-        paint.setShader(new LinearGradient(0, client.top, 0, client.bottom, 0xFF000060, 0xFF0060A0, Shader.TileMode.CLAMP));
-        c.drawRect(client, paint);
-        paint.setShader(null);
+        // The original changes its tiled backdrop (bitmaps 1-8 in TETRIS.EXE) with every level.
+        android.graphics.Bitmap backdrop = Media.get().bitmap("tetris.exe", Integer.toString(level % 8 + 1));
+        if (backdrop != null) {
+            Sprites.tile(c, backdrop, client, 2 * dp, client.left, client.top);
+        } else {
+            paint.setShader(new LinearGradient(0, client.top, 0, client.bottom, 0xFF000060, 0xFF0060A0,
+                    Shader.TileMode.CLAMP));
+            c.drawRect(client, paint);
+            paint.setShader(null);
+        }
         ui.sunken(c, new RectF(wellRect.left - 3 * dp, wellRect.top - 3 * dp, wellRect.right + 3 * dp, wellRect.bottom + 3 * dp),
                 0xFF000000);
         for (int y = 0; y < H; y++) {
