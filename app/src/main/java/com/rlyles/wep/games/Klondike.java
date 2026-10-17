@@ -1,4 +1,6 @@
-package com.rlyles.solitaire;
+package com.rlyles.wep.games;
+
+import com.rlyles.wep.cards.Card;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,7 +14,7 @@ import java.util.Random;
  * starting at {@link #FOUNDATION} and the seven tableau columns starting at {@link #TABLEAU}.
  * This class has no Android dependencies so it can be unit tested on the JVM.
  */
-public final class Game {
+public final class Klondike {
     public static final int STOCK = 0, WASTE = 1, FOUNDATION = 2, TABLEAU = 6, PILE_COUNT = 13;
     public static final int SCORE_STANDARD = 0, SCORE_VEGAS = 1, SCORE_NONE = 2;
 
@@ -38,7 +40,7 @@ public final class Game {
 
     private Snapshot undo;
 
-    public Game() {
+    public Klondike() {
         for (int s = 0; s < 4; s++) {
             for (int r = 1; r <= 13; r++) {
                 deck[s * 13 + r - 1] = new Card(s, r);
@@ -388,9 +390,9 @@ public final class Game {
     private final class Snapshot {
         final Card[][] cards = new Card[PILE_COUNT][];
         final boolean[] faceUp = new boolean[52];
-        final int score = Game.this.score;
-        final int recycles = Game.this.recycles;
-        final int wasteFan = Game.this.wasteFan;
+        final int score = Klondike.this.score;
+        final int recycles = Klondike.this.recycles;
+        final int wasteFan = Klondike.this.wasteFan;
 
         Snapshot() {
             for (int i = 0; i < PILE_COUNT; i++) {
@@ -409,9 +411,9 @@ public final class Game {
             for (Card c : deck) {
                 c.faceUp = faceUp[c.id()];
             }
-            Game.this.score = score;
-            Game.this.recycles = recycles;
-            Game.this.wasteFan = wasteFan;
+            Klondike.this.score = score;
+            Klondike.this.recycles = recycles;
+            Klondike.this.wasteFan = wasteFan;
         }
     }
 

@@ -1,64 +1,92 @@
-# Solitaire for Android
+# Entertainment Pack for Android
 
-A remake of the classic Windows Solitaire (Klondike) for Android phones and tablets. It's
-built from scratch to look and play like the original, down to the Windows 95 window, menus and
-dialogs and the bouncing cards when you win.
+A remake of the Windows 95 Best of Entertainment Pack and the classic Windows games, inside a
+Windows 95-style desktop, with the Windows 98 screen savers running next to whichever game you're
+playing.
 
-## Features
+Everything is written from scratch in Java: the games, the 3D screen savers, the Windows 95 desktop
+and its widgets. The app contains no Microsoft code or artwork.
 
-- **Game menu:** Deal, Undo, Deck…, Options…, Exit. **Help menu:** Contents, About.
-- **Options dialog:** Draw One / Draw Three; Standard, Vegas or no scoring; timed game; status
-  bar; outline dragging; cumulative Vegas score; and *Tap to move*, which is new.
-- **Original scoring rules:**
-  - Standard: +10 for a card to a foundation, +5 deck to column, +5 for turning a card over,
-    −15 for a card off a foundation.
-  - Recycling the deck costs −100 when drawing one, or −20 after the third pass when drawing
-    three.
-  - A timed game loses 2 points every 10 seconds, and a win earns a 700,000 ÷ seconds bonus.
-  - Vegas: $52 a game and $5 back for every card played up. You get one pass through the deck
-    when drawing one, three when drawing three.
-- **Bouncing-cards win animation**, followed by "Deal Again?".
-- **Touch controls:** drag cards and stacks, tap a card to send it to the best spot, double-tap
-  a card to send it to a foundation, or double-tap the green table to send up everything that
-  can go (the old right-click). Tap the deck to deal.
-- Your game and settings are saved automatically. Portrait and landscape both work.
+## The desktop
 
-## Card art
+- **Desktop and Start menu.** Tap a desktop icon, or use Start → Programs, to run a game. Games
+  open maximized above the taskbar, which has a button for each running game. The title-bar
+  buttons minimize or close a game.
+- **Split screen.** These were 4:3 games, so by default the game gets a 4:3 play area and the
+  screen saver fills the rest of the screen: above the game in portrait, to its left in
+  landscape.
+  - Drag the bar between them to change the split, or drag it to the edge to hide the screen
+    saver.
+  - Double-tap the bar to go back to the 4:3 split.
+- **Choosing a screen saver.** Long-press the screen saver, or the desktop, to open Display
+  Properties. It's also under Start → Settings → Screen Saver. Display Properties has:
+  - the screen saver list, with a live preview on the little monitor
+  - each saver's own Settings… dialog
+  - a full-screen Preview
+  - a "full screen after N minutes idle" timer
+- **Start → Settings** also turns the split screen and sound effects on and off.
 
-The app draws its own cards: classic-style faces and 12 original card backs. It doesn't
-contain any Microsoft artwork.
+## Games
 
-To play with the original cards, copy your own `cards.dll` from a Windows install to your
-phone. Then choose **Game → Deck… → Load cards.dll…** and pick the file. The app reads the card
-bitmaps out of the DLL's resources and never runs any of its code. **Built-in cards** switches
-back.
+Each game keeps its original menus and options.
 
-## Install
+| Game | Notes |
+| --- | --- |
+| Solitaire | Draw one or three; Standard, Vegas or no scoring; bouncing-cards win |
+| FreeCell | Microsoft's numbered deals (game numbers match the original), statistics |
+| Golf, TriPeaks, Tut's Tomb, Cruel | Undo/Backup, records, card backs |
+| BlackJack | Four-deck shoe, double, split, basic-strategy hints |
+| Minesweeper | Beginner/Intermediate/Expert/Custom, marks, best times; long-press to flag |
+| Reversi | Four skill levels, Hint, Pass |
+| Taipei | 144-tile turtle; every deal is winnable; Hint, Backup, Autoplay |
+| TetraVex | 2×2 to 6×6, numbers/letters/Greek/symbols, Hint, Solve |
+| Pegged | Cross, Plus, Fireplace, Up Arrow, Pyramid, Diamond, Solitaire |
+| TicTactics | 3×3, 3×3×3 and 4×4×4 against the computer |
+| Tetris | Drag to move, tap to rotate, flick down to drop |
+| JezzBall | Tap to build a wall, swipe to choose its direction |
+| Pipe Dream | Dispenser, countdown, crosses, Fast flow |
+| Rodent's Revenge | Hold a finger where the mouse should go; 50 levels |
+| SkiFree | Steer toward your finger, double-tap to jump; mind the yeti |
+| Snake | Eat 1 to 9, then out of the door to the next room |
+| Chip's Challenge | Ten built-in practice levels; load your own `CHIPS.DAT` from the Level menu |
 
-Download the APK (from the latest build on the Actions tab, or build it yourself) and open it on
-your phone. You may need to allow installing apps from that source.
+The card games can use the original card artwork: choose **Deck… → Load cards.dll…** and pick a
+`cards.dll` from a Windows install (the 32-bit PE version). The app only reads the bitmaps out of
+the DLL's resources and never runs its code. The DLL isn't included with the app.
+
+## Screen savers
+
+The 22 savers from Windows 98 and Plus! 98:
+
+- **3D:** 3D Flower Box, 3D Flying Objects, 3D Maze, 3D Pipes, 3D Text.
+- **Flying Windows** and **Starfield**.
+- **The Plus! 98 themes:** Baseball, Dangerous Creatures, Inside your Computer, Jungle, Leonardo
+  da Vinci, Mystery, Nature, Science, Space, Sports, The 60's USA, The Golden Era, Travel,
+  Underwater and Windows 98.
+
+The original theme savers showed pictures from their Plus! themes. Those pictures aren't part of
+the `.scr` files, so each theme here is an original animated scene instead.
 
 ## Build
 
 Requirements: JDK 17+ and the Android SDK (platform 34).
 
 ```
-./gradlew testDebugUnitTest   # rules, scoring and UI tests (Robolectric)
+./gradlew testDebugUnitTest   # rules tests, a Chip's Challenge level solver, Robolectric UI tests
 ./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk
 ```
 
 The release build is signed with the local debug key so it can be sideloaded right away.
 
-To save screenshots of the UI tests, or to test the DLL loader, pass
-`-DscreenshotDir=/some/dir` and `-DcardsDll=/path/to/cards.dll` to the test task.
+To save screenshots of every game and screen saver during the UI tests, pass
+`-DscreenshotDir=/some/dir` to the test task.
 
 ## Code
 
-| File | What it does |
+| Package | What's in it |
 | --- | --- |
-| `Game.java` | Klondike rules, scoring, undo, save/load (plain Java, unit tested) |
-| `SolitaireView.java` | Layout, drawing, touch, animations, menus, dialogs |
-| `Win95.java` | Windows 95 look-alike widgets drawn on a Canvas |
-| `CardPainter.java` | The built-in vector card faces and backs |
-| `CardsDll.java` | Reads card bitmaps from a user-supplied cards.dll |
-| `CardArt.java` | Picks built-in or DLL art and caches it at screen size |
+| `win` | The Windows 95 widget kit (`Win95`), dialogs and on-screen keyboard (`RetroView`), the app window base class (`WinApp`), icons, sound effects |
+| `shell` | `MainActivity`, the split-screen `Shell`, `Desktop`, `Taskbar` with the Start menu and Display Properties, the program list (`Apps`) |
+| `cards` | Card art (built-in and `cards.dll`), shared card-game plumbing |
+| `games` | One class per game, plus pure-Java rule engines (`Klondike`, `FreeCellModel`, `ChipsEngine`) |
+| `savers` | The screen savers and a small 3D helper |

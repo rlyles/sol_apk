@@ -1,4 +1,4 @@
-package com.rlyles.solitaire;
+package com.rlyles.wep.cards;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -13,9 +13,9 @@ import android.graphics.Typeface;
  * Draws the built-in card artwork: faces in the style of the classic 71x96 Windows cards, and a
  * set of original card-back patterns. Everything is vector drawn so it stays sharp at any size.
  */
-final class CardPainter {
-    static final int BACK_COUNT = 12;
-    static final String[] BACK_NAMES = {
+public final class CardPainter {
+    public static final int BACK_COUNT = 12;
+    public static final String[] BACK_NAMES = {
             "Crosshatch", "Red Lattice", "Basket Weave", "Scales", "Bricks", "Waves",
             "Polka Dots", "Checkers", "Candy Stripe", "Tartan", "Night Sky", "Sunburst"};
 
@@ -30,7 +30,7 @@ final class CardPainter {
     private final Path tmp = new Path();
     private final Matrix matrix = new Matrix();
 
-    CardPainter() {
+    public CardPainter() {
         stroke.setStyle(Paint.Style.STROKE);
         text.setTypeface(Typeface.create(Typeface.SERIF, Typeface.BOLD));
         text.setTextAlign(Paint.Align.CENTER);
@@ -92,7 +92,7 @@ final class CardPainter {
     }
 
     /** Draws a suit symbol centred at (cx, cy) with the given height, optionally upside down. */
-    void drawSuit(Canvas c, int suit, float cx, float cy, float size, boolean flipped, int color) {
+    public void drawSuit(Canvas c, int suit, float cx, float cy, float size, boolean flipped, int color) {
         float w = suit == Card.DIAMONDS ? size * 0.82f : size * 0.92f;
         matrix.reset();
         matrix.setScale(w, size);
@@ -108,7 +108,7 @@ final class CardPainter {
 
     // ---------------------------------------------------------------- faces
 
-    Bitmap renderFace(Card card, int w, int h) {
+    public Bitmap renderFace(Card card, int w, int h) {
         Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
         drawBlank(c, w, h, Color.WHITE);
@@ -301,7 +301,7 @@ final class CardPainter {
 
     // ---------------------------------------------------------------- backs
 
-    Bitmap renderBack(int design, int w, int h) {
+    public Bitmap renderBack(int design, int w, int h) {
         Bitmap b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(b);
         drawBlank(c, w, h, Color.WHITE);
@@ -486,7 +486,7 @@ final class CardPainter {
     // ---------------------------------------------------------------- empty-stock markers
 
     /** The green "O" (stock can be turned over) or red "X" (no more passes) on an empty stock. */
-    void drawStockMarker(Canvas c, RectF r, boolean canRecycle) {
+    public void drawStockMarker(Canvas c, RectF r, boolean canRecycle) {
         stroke.setStrokeWidth(r.width() * 0.09f);
         float cx = r.centerX(), cy = r.centerY(), rad = r.width() * 0.3f;
         if (canRecycle) {

@@ -1,4 +1,4 @@
-package com.rlyles.solitaire;
+package com.rlyles.wep.cards;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -10,7 +10,7 @@ import android.graphics.RectF;
  * Supplies card images at the current on-screen card size, either from the built-in
  * {@link CardPainter} artwork or from a cards.dll the user loaded.
  */
-final class CardArt {
+public final class CardArt {
     private final CardPainter painter = new CardPainter();
     private CardsDll dll;
     private int w, h;
@@ -22,15 +22,15 @@ final class CardArt {
     private final RectF dst = new RectF();
     private final Rect src = new Rect();
 
-    void setDll(CardsDll dll) {
+    public void setDll(CardsDll dll) {
         this.dll = dll;
     }
 
-    boolean usingDll() {
+    public boolean usingDll() {
         return dll != null;
     }
 
-    void setSize(int w, int h) {
+    public void setSize(int w, int h) {
         if (w == this.w && h == this.h) {
             return;
         }
@@ -40,15 +40,15 @@ final class CardArt {
         java.util.Arrays.fill(backs, null);
     }
 
-    int backCount() {
+    public int backCount() {
         return dll != null ? dll.backs.size() : CardPainter.BACK_COUNT;
     }
 
-    String backName(int back) {
+    public String backName(int back) {
         return dll != null ? "Design " + (back + 1) : CardPainter.BACK_NAMES[back];
     }
 
-    void drawCard(Canvas c, Card card, int back, float x, float y) {
+    public void drawCard(Canvas c, Card card, int back, float x, float y) {
         if (card.faceUp) {
             drawFace(c, card, x, y);
         } else {
@@ -56,7 +56,7 @@ final class CardArt {
         }
     }
 
-    void drawFace(Canvas c, Card card, float x, float y) {
+    public void drawFace(Canvas c, Card card, float x, float y) {
         if (dll != null) {
             drawScaled(c, dll.faces[card.id()], x, y, w, h, pixelated);
             return;
@@ -68,7 +68,27 @@ final class CardArt {
         c.drawBitmap(b, x, y, null);
     }
 
-    void drawBack(Canvas c, int back, float x, float y) {
+    private final Paint inverted = new Paint();
+
+    {
+        inverted.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[] {
+                -1, 0, 0, 0, 255, 0, -1, 0, 0, 255, 0, 0, -1, 0, 255, 0, 0, 0, 1, 0}));
+    }
+
+    /** A face drawn in inverted colours: how the Entertainment Pack games show a selected card. */
+    public void drawFaceInverted(Canvas c, Card card, float x, float y) {
+        if (dll != null) {
+            drawScaled(c, dll.faces[card.id()], x, y, w, h, inverted);
+            return;
+        }
+        Bitmap b = faces[card.id()];
+        if (b == null) {
+            b = faces[card.id()] = painter.renderFace(card, w, h);
+        }
+        c.drawBitmap(b, x, y, inverted);
+    }
+
+    public void drawBack(Canvas c, int back, float x, float y) {
         back = clampBack(back);
         if (dll != null) {
             drawScaled(c, dll.backs.get(back), x, y, w, h, pixelated);
@@ -78,7 +98,7 @@ final class CardArt {
     }
 
     /** Draws a card back into an arbitrary rectangle (the Deck dialog's thumbnails). */
-    void drawBackIn(Canvas c, int back, RectF r) {
+    public void drawBackIn(Canvas c, int back, RectF r) {
         back = clampBack(back);
         if (dll != null) {
             drawScaled(c, dll.backs.get(back), r.left, r.top, r.width(), r.height(), pixelated);
@@ -87,7 +107,7 @@ final class CardArt {
         }
     }
 
-    void drawStockMarker(Canvas c, RectF r, boolean canRecycle) {
+    public void drawStockMarker(Canvas c, RectF r, boolean canRecycle) {
         Bitmap marker = dll == null ? null : canRecycle ? dll.o : dll.x;
         if (marker != null) {
             drawScaled(c, marker, r.left, r.top, r.width(), r.height(), pixelated);
@@ -96,7 +116,7 @@ final class CardArt {
         }
     }
 
-    int clampBack(int back) {
+    public int clampBack(int back) {
         return Math.max(0, Math.min(back, backCount() - 1));
     }
 

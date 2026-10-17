@@ -1,4 +1,4 @@
-package com.rlyles.solitaire;
+package com.rlyles.wep.cards;
 
 import android.graphics.Bitmap;
 import android.graphics.Color;
@@ -17,18 +17,18 @@ import java.util.TreeMap;
  * ids 1-52 (clubs, diamonds, hearts, spades; ace to king), card backs live in 53-66, and 67/68
  * are the "X" and "O" markers drawn on an empty stock.
  */
-final class CardsDll {
-    static final int CARD_W = 71, CARD_H = 96;
+public final class CardsDll {
+    public static final int CARD_W = 71, CARD_H = 96;
     private static final int RT_BITMAP = 2;
 
-    final Bitmap[] faces = new Bitmap[52];
-    final List<Bitmap> backs = new ArrayList<>();
-    Bitmap x, o;
+    public final Bitmap[] faces = new Bitmap[52];
+    public final List<Bitmap> backs = new ArrayList<>();
+    public Bitmap x, o;
 
     private CardsDll() {
     }
 
-    static CardsDll parse(byte[] data) throws IOException {
+    public static CardsDll parse(byte[] data) throws IOException {
         TreeMap<Integer, byte[]> dibs = readBitmapResources(data);
         CardsDll art = new CardsDll();
         for (int i = 0; i < 52; i++) {
@@ -171,7 +171,7 @@ final class CardsDll {
     // ---------------------------------------------------------------- DIB decoding
 
     /** Decodes an uncompressed device-independent bitmap (as stored in RT_BITMAP resources). */
-    static Bitmap decodeDib(byte[] d) throws IOException {
+    public static Bitmap decodeDib(byte[] d) throws IOException {
         ByteBuffer bb = ByteBuffer.wrap(d).order(ByteOrder.LITTLE_ENDIAN);
         int headerSize = bb.getInt(0);
         int w, h, bpp, compression = 0, colorsUsed = 0, paletteEntry;

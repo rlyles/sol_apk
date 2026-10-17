@@ -1,4 +1,4 @@
-package com.rlyles.solitaire;
+package com.rlyles.wep.cards;
 
 /** One playing card. Suits follow the cards.dll bitmap order: clubs, diamonds, hearts, spades. */
 public final class Card {
@@ -9,7 +9,7 @@ public final class Card {
     public final int rank;
     public boolean faceUp;
 
-    Card(int suit, int rank) {
+    public Card(int suit, int rank) {
         this.suit = suit;
         this.rank = rank;
     }
